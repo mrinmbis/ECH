@@ -33,6 +33,24 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+    - name: Create Resource Group and Storage Account
+      run: |
+        # Create Resource Group if it doesn't exist
+        az group create --name rg-terraform-state --location eastus
+        
+        # Create the Storage Account
+        az storage account create \
+          --name echtfstateacct \
+          --resource-group rg-terraform-state \
+          --location eastus \
+          --sku Standard_LRS \
+          --kind StorageV2
+        
+        # Create the container inside the Storage Account
+        az storage container create \
+          --name tfstate \
+          --account-name echtfstateacct
+
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
       with:
