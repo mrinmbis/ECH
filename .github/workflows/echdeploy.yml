@@ -12,46 +12,32 @@ permissions:
 
 env:
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
 jobs:
-  deploy:
-    name: Provision Infra with Terraform
+  terraform:
+    name: Terraform Apply
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Azure Login
+    - name: Azure Login with OIDC
       uses: azure/login@v1
       with:
         client-id: ${{ secrets.AZURE_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Create Terraform backend storage
-      run: |
-        az group create --name rg-terraform-state --location eastus
-        az storage account create \
-          --name echtfstateacct \
-          --resource-group rg-terraform-state \
-          --location eastus \
-          --sku Standard_LRS \
-          --kind StorageV2
-        az storage container create \
-          --name tfstate \
-          --account-name echtfstateacct
-
-    - name: Setup Terraform
+    - name: Set up Terraform
       uses: hashicorp/setup-terraform@v2
       with:
         terraform_version: 1.5.0
 
     - name: Terraform Init
-      run: terraform init -reconfigure
+      run: terraform init
       working-directory: .github
 
     - name: Terraform Validate
