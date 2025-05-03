@@ -8,7 +8,7 @@ resource "azurerm_resource_group" "rgech" {
 }
 
 resource "azurerm_storage_account" "sa" {
-  name                     = "gitopsfuncstorage123" # Must be globally unique
+  name                     = "gitopsfuncstorageech" # Must be globally unique
   resource_group_name      = azurerm_resource_group.rgech.name
   location                 = azurerm_resource_group.rgech.location
   account_tier             = "Standard"
