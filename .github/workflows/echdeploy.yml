@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
 
 env:
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -14,31 +13,31 @@ env:
 
 jobs:
   terraform:
-    name: Terraform Apply
+    name: Terraform Deploy
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-    - name: Set up Terraform
-      uses: hashicorp/setup-terraform@v2
-      with:
-        terraform_version: 1.5.0
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
 
-    - name: Terraform Init
-      run: terraform init
-      working-directory: ./terraform
+      - name: Terraform Init
+        run: terraform init
+        working-directory: .github
 
-    - name: Terraform Validate
-      run: terraform validate
-      working-directory: ./terraform
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: .github
 
-    - name: Terraform Plan
-      run: terraform plan -out=tfplan
-      working-directory: ./terraform
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+        working-directory: .github
 
-    - name: Terraform Apply
-      if: github.ref == 'refs/heads/main'
-      run: terraform apply -auto-approve tfplan
-      working-directory: ./terraform
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve tfplan
+        working-directory: .github
