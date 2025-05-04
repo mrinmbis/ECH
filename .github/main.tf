@@ -5,7 +5,7 @@ provider "azurerm" {
 # Resource Group
 resource "azurerm_resource_group" "rgech" {
   name     = "rg-gitops-func"
-  location = "eastus"  # Ensured lowercase for region
+  location = "westus2"  # Ensured lowercase for region
 }
 
 # Storage Account (Updated Name)
@@ -32,8 +32,8 @@ resource "azurerm_app_service_plan" "asp" {
   kind                = "FunctionApp"
 
   sku {
-    tier = "Dynamic"
-    size = "Y1"
+    tier = "Basic"
+    size = "B1"
   }
 }
 
