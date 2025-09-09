@@ -36,25 +36,34 @@ jobs:
       run: |
         az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     
+      # ===============================
+    # Send Logs to Azure Monitor
+    # ===============================
+    - name: Send Deployment Logs to Azure Monitor
+      if: always() # Run even if job fails
+      run: |
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        STATUS="${{ job.status }}"
+        MESSAGE="Terraform deployment finished with status: $STATUS"
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
-      with:
-        terraform_version: 1.4.0
+        # Prepare log JSON
+        LOG="{\"timestamp\":\"$TIMESTAMP\",\"workflow\":\"${{ github.workflow }}\",\"job\":\"${{ github.job }}\",\"status\":\"$STATUS\",\"message\":\"$MESSAGE\"}"
 
-    - name: Terraform Init
-      run: terraform init -reconfigure
-      working-directory: .github
+        # Create signature
+        WORKSPACE_ID="${{ secrets.AZURE_LOG_ANALYTICS_WORKSPACE_ID }}"
+        SHARED_KEY="${{ secrets.AZURE_LOG_ANALYTICS_SHARED_KEY }}"
+        LOG_TYPE="GitHubActionsLogs"
 
-    - name: Terraform Validate
-      run: terraform validate
-      working-directory: .github
+        BODY_LENGTH=$(echo -n $LOG | wc -c)
+        RFC1123_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S GMT")
+        STRING_TO_SIGN="POST\n$BODY_LENGTH\napplication/json\nx-ms-date:$RFC1123_DATE\n/api/logs"
+        SIGNATURE=$(echo -n "$STRING_TO_SIGN" | iconv -t utf8 | openssl dgst -sha256 -hmac "$(echo -n $SHARED_KEY | base64 -d 2>/dev/null)" -binary | base64)
 
-    - name: Terraform Plan
-      run: terraform plan -out=tfplan
-      working-directory: .github
-
-    - name: Terraform Apply
-      if: github.ref == 'refs/heads/main'
-      run: terraform apply -auto-approve tfplan
-      working-directory: .github
+        # Send log
+        curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -H "Log-Type: $LOG_TYPE" \
+          -H "x-ms-date: $RFC1123_DATE" \
+          -H "Authorization: SharedKey $WORKSPACE_ID:$SIGNATURE" \
+          -d "$LOG" \
+          "https://$WORKSPACE_ID.ods.opinsights.azure.com/api/logs?api-version=2016-04-01"
