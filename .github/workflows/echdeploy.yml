@@ -55,9 +55,8 @@ jobs:
         RFC1123_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S GMT")
         STRING_TO_SIGN="POST\n$CONTENT_LENGTH\napplication/json\nx-ms-date:$RFC1123_DATE\n/api/logs"
     
-        # Use openssl directly with -K for binary key (decode base64 safely)
-        BINARY_KEY=$(echo $SHARED_KEY | base64 -d)
-        SIGNATURE=$(echo -n "$STRING_TO_SIGN" | openssl dgst -sha256 -mac HMAC -macopt hexkey:$(echo -n "$BINARY_KEY" | xxd -p) -binary | base64)
+        # Safe HMAC: use here-string to avoid null byte / file issues
+        SIGNATURE=$(openssl dgst -sha256 -binary -hmac "$(echo -n $SHARED_KEY | base64 -d)" <<< "$STRING_TO_SIGN" | base64)
     
         curl -s -X POST \
           -H "Content-Type: application/json" \
