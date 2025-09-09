@@ -50,15 +50,19 @@ jobs:
         LOG="{\"timestamp\":\"$TIMESTAMP\",\"workflow\":\"${{ github.workflow }}\",\"job\":\"${{ github.job }}\",\"status\":\"$STATUS\",\"message\":\"$MESSAGE\"}"
 
         # Create signature
+        # Variables
         WORKSPACE_ID="${{ secrets.AZURE_LOG_ANALYTICS_WORKSPACE_ID }}"
         SHARED_KEY="${{ secrets.AZURE_LOG_ANALYTICS_SHARED_KEY }}"
         LOG_TYPE="GitHubActionsLogs"
-
+        
+        # Build string to sign
         BODY_LENGTH=$(echo -n $LOG | wc -c)
         RFC1123_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S GMT")
         STRING_TO_SIGN="POST\n$BODY_LENGTH\napplication/json\nx-ms-date:$RFC1123_DATE\n/api/logs"
-        SIGNATURE=$(echo -n "$STRING_TO_SIGN" | iconv -t utf8 | openssl dgst -sha256 -hmac "$(echo -n $SHARED_KEY | base64 -d 2>/dev/null)" -binary | base64)
-
+        
+        # Generate signature (IMPORTANT: don't decode the key here, openssl needs base64 directly)
+        SIGNATURE=$(echo -n "$STRING_TO_SIGN" | iconv -t utf8 | openssl dgst -sha256 -binary -hmac "$(echo -n $SHARED_KEY | base64 -d)" | base64)
+        
         # Send log
         curl -s -X POST \
           -H "Content-Type: application/json" \
@@ -67,3 +71,4 @@ jobs:
           -H "Authorization: SharedKey $WORKSPACE_ID:$SIGNATURE" \
           -d "$LOG" \
           "https://$WORKSPACE_ID.ods.opinsights.azure.com/api/logs?api-version=2016-04-01"
+
