@@ -17,62 +17,68 @@ env:
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
 jobs:
-  deploy:
-    name: Provision Infra with Terraform
+  send_logs:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-    - name: Azure Login
-      uses: azure/login@v1
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-    - name: Set Azure subscription
-      run: |
-        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-    
-      # ===============================
-    # Send Logs to Azure Monitor for workflow
-    # ===============================
-    - name: Send Deployment Logs to Azure Monitor
-      if: always()
-      shell: bash
-      run: |
-        WORKSPACE_ID="${{ secrets.AZURE_LOG_ANALYTICS_WORKSPACE_ID }}"
-        SHARED_KEY="${{ secrets.AZURE_LOG_ANALYTICS_SHARED_KEY }}"
-        LOG_TYPE="GitHubActions"
-    
-        PAYLOAD="{\"workflow\":\"${{ github.workflow }}\",\"job\":\"${{ github.job }}\",\"status\":\"${{ job.status }}\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
-    
-        CONTENT_LENGTH=$(printf '%s' "$PAYLOAD" | wc -c)
-        RFC1123_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S GMT")
-    
-        # REAL newlines, not "\n"
-        STRING_TO_SIGN="POST
-        $CONTENT_LENGTH
-        application/json
-        x-ms-date:$RFC1123_DATE
-        /api/logs"
-    
-        DECODED_KEY=$(echo -n "$SHARED_KEY" | base64 --decode | tr -d '\0')
-        SIGNATURE=$(printf '%s' "$STRING_TO_SIGN" | openssl dgst -sha256 -binary -hmac "$DECODED_KEY" | base64)
-        AUTH_HEADER="SharedKey $WORKSPACE_ID:$SIGNATURE"
-    
-        echo "DEBUG: STRING_TO_SIGN:"
-        printf '%s\n' "$STRING_TO_SIGN"
-        echo "DEBUG: SIGNATURE=$SIGNATURE"
-    
-        curl -s -X POST \
-          -H "Content-Type: application/json" \
-          -H "Log-Type: $LOG_TYPE" \
-          -H "x-ms-date: $RFC1123_DATE" \
-          -H "Authorization: $AUTH_HEADER" \
-          --data "$PAYLOAD" \
-          "https://$WORKSPACE_ID.ods.opinsights.azure.com/api/logs?api-version=2016-04-01"
+      - name: Install dependencies
+        run: pip install requests
 
+      - name: Send logs to Azure Log Analytics
+        env:
+          WORKSPACE_ID: ${{ secrets.AZURE_LOG_ANALYTICS_WORKSPACE_ID }}
+          SHARED_KEY: ${{ secrets.AZURE_LOG_ANALYTICS_SHARED_KEY }}
+          GITHUB_WORKFLOW: ${{ github.workflow }}
+          GITHUB_JOB: ${{ github.job }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python3 <<'EOF'
+          import os, json, base64, hmac, hashlib
+          from datetime import datetime
+          import requests
+
+          workspace_id = os.environ["WORKSPACE_ID"]
+          shared_key = os.environ["SHARED_KEY"]
+          log_type = "GitHubActions"
+
+          # Build payload
+          payload = {
+              "workflow": os.environ["GITHUB_WORKFLOW"],
+              "job": os.environ["GITHUB_JOB"],
+              "status": os.environ["JOB_STATUS"],
+              "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+          }
+          body = json.dumps(payload)
+          content_length = len(body)
+
+          # Current UTC date in RFC1123 format
+          rfc1123date = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+          # String-to-sign
+          string_to_sign = f"POST\n{content_length}\napplication/json\nx-ms-date:{rfc1123date}\n/api/logs"
+
+          # Decode shared key
+          decoded_key = base64.b64decode(shared_key)
+
+          # Generate HMAC signature
+          hashed = hmac.new(decoded_key, string_to_sign.encode("utf-8"), hashlib.sha256).digest()
+          signature = base64.b64encode(hashed).decode()
+
+          auth_header = f"SharedKey {workspace_id}:{signature}"
+
+          # Send POST request to Azure Log Analytics
+          uri = f"https://{workspace_id}.ods.opinsights.azure.com/api/logs?api-version=2016-04-01"
+          headers = {
+              "Content-Type": "application/json",
+              "Log-Type": log_type,
+              "x-ms-date": rfc1123date,
+              "Authorization": auth_header
+          }
+
+          resp = requests.post(uri, data=body, headers=headers)
+          print("Response code:", resp.status_code)
+          print("Response body:", resp.text)
+          EOF
 
