@@ -44,23 +44,27 @@ jobs:
       shell: bash
       run: |
         WORKSPACE_ID="${{ secrets.AZURE_LOG_ANALYTICS_WORKSPACE_ID }}"
-        SHARED_KEY="${{ secrets.AZURE_LOG_ANALYTICS_SHARED_KEY }}"
+        SHARED_KEY="${{ secrets.AZURE_LOG_ANALYTICS_SHARED_KEY }}" # This is the Base64-encoded shared key from Azure
         LOG_TYPE="GitHubActions"
     
         # Build payload
-        PAYLOAD="{\"workflow\":\"echdeploy\",\"status\":\"${{ job.status }}\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+        PAYLOAD="{\"workflow\":\"${{ github.workflow }}\",\"job\":\"${{ github.job }}\",\"status\":\"${{ job.status }}\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
     
+        # Compute values
         CONTENT_LENGTH=$(printf '%s' "$PAYLOAD" | wc -c)
         RFC1123_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S GMT")
         STRING_TO_SIGN="POST\n$CONTENT_LENGTH\napplication/json\nx-ms-date:$RFC1123_DATE\n/api/logs"
     
-        # Decode workspace shared key and build HMAC signature
-        DECODED_KEY=$(printf '%s' "$SHARED_KEY" | base64 -d 2>/dev/null)
-        SIGNATURE=$(printf '%s' "$STRING_TO_SIGN" | openssl dgst -sha256 -binary -hmac "$DECODED_KEY" | base64)
+        # Decode shared key (safe, no null bytes)
+        DECODED_KEY=$(echo -n "$SHARED_KEY" | base64 --decode 2>/dev/null | tr -d '\0')
+    
+        # Generate signature
+        SIGNATURE=$(printf '%s' "$STRING_TO_SIGN" | \
+          openssl dgst -sha256 -binary -hmac "$DECODED_KEY" | base64)
     
         AUTH_HEADER="SharedKey $WORKSPACE_ID:$SIGNATURE"
     
-        # Send to Azure Monitor
+        # Send to Azure
         curl -s -X POST \
           -H "Content-Type: application/json" \
           -H "Log-Type: $LOG_TYPE" \
@@ -68,3 +72,4 @@ jobs:
           -H "Authorization: $AUTH_HEADER" \
           --data "$PAYLOAD" \
           "https://$WORKSPACE_ID.ods.opinsights.azure.com/api/logs?api-version=2016-04-01"
+    
