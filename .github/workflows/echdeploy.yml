@@ -79,6 +79,5 @@ jobs:
           resp = requests.post(uri, data=body, headers=headers)
           print("Response code:", resp.status_code)
           print("Response body:", resp.text)
-          false line
           EOF
 
